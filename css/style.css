@@ -15,3 +15,6 @@ body { font-family: 'Plus Jakarta Sans', system-ui, sans-serif; }
 button, a { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
 #cartBar { bottom: calc(1rem + env(safe-area-inset-bottom)) !important; }   /* aman dari home bar iPhone */
 body { padding-bottom: calc(7rem + env(safe-area-inset-bottom)); }
+
+/* ---- Status PO ---- */
+.qbtn:disabled { background: #d6d3d1; color: #a8a29e; cursor: not-allowed; }

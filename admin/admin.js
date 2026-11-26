@@ -10,6 +10,7 @@ export const toLocalInput = (v) => { if (!v) return ''; const d = new Date(v); i
 
 /* ---------- Session (token berlaku 6 jam, sama dengan cache backend) ---------- */
 export const session = () => { try { const s = JSON.parse(localStorage.getItem(KEY)); return s && s.exp > Date.now() ? s.token : null; } catch { return null; } };
+export const me = () => { try { const x = JSON.parse(localStorage.getItem(KEY)) || {}; return { username: x.username, name: x.name, role: x.role || 'admin' }; } catch { return { role: 'admin' }; } };
 export const requireLogin = () => { if (!session()) location.replace('login.html'); };
 export const logout = () => {
   const t = session();
@@ -29,7 +30,7 @@ export const get = (action, extra = {}) => req({ action, token: session(), ...ex
 export const post = (body) => req({}, { token: session(), ...body });
 export async function login(username, password) {
   const d = await req({}, { action: 'login', username, password });
-  localStorage.setItem(KEY, JSON.stringify({ token: d.token, exp: Date.now() + 6 * 36e5 - 6e4 }));
+  localStorage.setItem(KEY, JSON.stringify({ token: d.token, exp: Date.now() + 6 * 36e5 - 6e4, username: d.username, name: d.name, role: d.role }));
 }
 
 /* ---------- UI helpers ---------- */
@@ -56,7 +57,7 @@ export function openModal(html) {
 export const closeModal = () => $('#modal')?.remove();
 
 export function nav(active) {
-  const L = [['dashboard', 'Dashboard'], ['products', 'Produk'], ['categories', 'Kategori'], ['orders', 'Order'], ['reports', 'Laporan'], ['account', 'Akun']];
+  const L = [['dashboard', 'Dashboard'], ['products', 'Produk'], ['categories', 'Kategori'], ['orders', 'Order'], ['reports', 'Laporan'], ['users', 'Admin Users'], ['account', 'Akun']];
   document.body.insertAdjacentHTML('afterbegin', `<header class="sticky top-0 z-30 bg-orange-500 text-white">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <b class="text-lg shrink-0">Nael Food Admin</b>

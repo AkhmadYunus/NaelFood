@@ -10,32 +10,66 @@ const PLACEHOLDER = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http
 
 let products = [], settings = {}, requestId = null, submitting = false;
 
-const isOpen = (p) => {
-  const now = Date.now();
-  return p.active && (!p.po_start || now >= new Date(p.po_start)) && (!p.po_end || now <= new Date(p.po_end)) && (!p.quota || p.sold < p.quota);
+// Status efektif PO: open | closed | soon. Harus sama dengan poState_ di backend.
+const poState = (p) => {
+  const st = p.po_status || 'open', now = Date.now();
+  if (st === 'closed' || st === 'soon') return st;
+  if (p.po_start && now < new Date(p.po_start)) return 'soon';
+  if ((p.po_end && now > new Date(p.po_end)) || (p.quota && p.sold >= p.quota)) return 'closed';
+  return 'open';
 };
+const gallery = (p) => [p.image_url, ...(p.extra_images || [])].filter(Boolean);   // foto utama + tambahan
 function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.remove('hidden'); setTimeout(() => t.classList.add('hidden'), 3000); }
 
 /* ---------- Render produk ---------- */
 function renderProducts() {
   $('#products').innerHTML = products.map(p => {
-    const open = isOpen(p), q = cart.qty(p.id);
-    return `<article class="card p-3 flex gap-3">
-      <img src="${esc(p.image_url) || PLACEHOLDER}" onerror="this.onerror=null;this.src='${PLACEHOLDER}'" alt="${esc(p.name)}" class="w-24 h-24 rounded-2xl object-cover shrink-0" loading="lazy">
+    const st = poState(p), open = st === 'open', q = cart.qty(p.id), imgs = gallery(p);
+    const tone = st === 'closed' ? 'opacity-50' : st === 'soon' ? 'grayscale !bg-stone-200 dark:!bg-neutral-700' : '';
+    const pill = (t, c) => `<span class="text-[11px] ${c} rounded-full px-2 py-0.5 whitespace-nowrap">${t}</span>`;
+    const badges = (st === 'closed' ? pill('PO Ditutup', 'bg-red-100 text-red-600') : st === 'soon' ? pill('Segera Hadir', 'bg-stone-300 text-stone-700') : '')
+      + (p.bestseller && open ? pill('Best Seller', 'bg-orange-100 text-orange-600') : '');
+    const img = `<img src="${esc(imgs[0]) || PLACEHOLDER}" onerror="this.onerror=null;this.src='${PLACEHOLDER}'" alt="${esc(p.name)}" class="w-24 h-24 rounded-2xl object-cover" loading="lazy">`;
+    // 1 foto: tampilan sama seperti sebelumnya. >1 foto: tap untuk membuka carousel
+    const media = imgs.length > 1
+      ? `<button data-act="gallery" data-id="${esc(p.id)}" class="relative shrink-0 self-start" aria-label="Lihat ${imgs.length} foto">${img}<span class="absolute bottom-1 right-1 text-[10px] bg-black/60 text-white rounded-full px-1.5">1/${imgs.length}</span></button>`
+      : `<div class="shrink-0 self-start">${img}</div>`;
+    const actions = open
+      ? `<div class="flex items-center gap-2">${q ? `<button class="qbtn minus" data-act="dec" data-id="${esc(p.id)}" aria-label="Kurang">−</button><span class="w-5 text-center font-bold">${q}</span>` : ''}
+         <button class="qbtn" data-act="inc" data-id="${esc(p.id)}" aria-label="Tambah">+</button></div>`
+      : `<div class="flex items-center gap-2">${st === 'soon' && p.po_start ? `<span class="text-xs text-stone-500">Mulai ${fmtDate(p.po_start)}</span>` : ''}
+         <button class="qbtn" disabled aria-disabled="true" aria-label="Tidak tersedia">+</button></div>`;
+    return `<article class="card p-3 flex gap-3 ${tone}">${media}
       <div class="flex-1 min-w-0">
-        <div class="flex gap-2 items-start"><h3 class="font-bold leading-tight">${esc(p.name)}</h3>
-          ${p.bestseller ? '<span class="text-[11px] bg-orange-100 text-orange-600 rounded-full px-2 py-0.5 whitespace-nowrap">Best Seller</span>' : ''}</div>
+        <div class="flex gap-2 items-start flex-wrap"><h3 class="font-bold leading-tight">${esc(p.name)}</h3>${badges}</div>
         <p class="text-xs text-stone-500 mt-1">${esc(p.description)}</p>
         <p class="text-xs text-stone-500 mt-1">Isi ${p.pack} ${esc(p.unit)} · ${p.sold} terpesan${p.quota ? ' dari ' + p.quota : ''}</p>
-        <div class="flex items-center justify-between mt-2">
-          <b class="text-orange-500">${rp(p.price)}</b>
-          ${open ? `<div class="flex items-center gap-2">
-              ${q ? `<button class="qbtn minus" data-act="dec" data-id="${p.id}" aria-label="Kurang">−</button><span class="w-5 text-center font-bold">${q}</span>` : ''}
-              <button class="qbtn" data-act="inc" data-id="${p.id}" aria-label="Tambah">+</button></div>`
-            : '<span class="text-xs font-semibold text-stone-400">PO Telah Ditutup</span>'}
-        </div></div></article>`;
+        <div class="flex items-center justify-between mt-2"><b class="text-orange-500">${rp(p.price)}</b>${actions}</div></div></article>`;
   }).join('') || '<p class="text-center text-stone-500 py-10">Belum ada produk.</p>';
   renderBar();
+}
+
+/* ---------- Carousel foto (geser / tombol / thumbnail) ---------- */
+function openGallery(id) {
+  const p = products.find(x => x.id === id), imgs = gallery(p), o = document.createElement('div');
+  o.className = 'fixed inset-0 z-50 bg-black/90 flex flex-col items-center justify-center p-4';
+  o.innerHTML = `<button data-close class="absolute top-4 right-4 text-white text-4xl leading-none" aria-label="Tutup">×</button>
+    <div class="relative w-full max-w-md"><div id="gScroll" class="flex overflow-x-auto snap-x snap-mandatory rounded-2xl" style="scrollbar-width:none">
+      ${imgs.map(u => `<img src="${esc(u)}" class="w-full shrink-0 snap-center aspect-square object-cover" alt="${esc(p.name)}">`).join('')}</div>
+      <button data-nav="-1" class="absolute left-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full w-10 h-10 text-xl" aria-label="Sebelumnya">‹</button>
+      <button data-nav="1" class="absolute right-2 top-1/2 -translate-y-1/2 bg-white/80 rounded-full w-10 h-10 text-xl" aria-label="Berikutnya">›</button></div>
+    <div class="flex gap-2 mt-3 max-w-md overflow-x-auto">${imgs.map((u, i) => `<button data-i="${i}" class="shrink-0 w-14 h-14 rounded-xl overflow-hidden border-2 border-transparent"><img src="${esc(u)}" class="w-full h-full object-cover" alt=""></button>`).join('')}</div>
+    <p class="text-white/80 text-sm mt-2">${esc(p.name)}</p>`;
+  document.body.append(o);
+  const sc = o.querySelector('#gScroll'), th = [...o.querySelectorAll('[data-i]')];
+  const mark = () => { const i = Math.round(sc.scrollLeft / sc.clientWidth); th.forEach((t, k) => t.classList.toggle('border-orange-500', k === i)); };
+  sc.addEventListener('scroll', mark); mark();
+  o.addEventListener('click', (e) => {
+    const t = e.target.closest('[data-i],[data-nav],[data-close]');
+    if (e.target === o || (t && 'close' in t.dataset)) return o.remove();
+    if (t?.dataset.i != null) sc.scrollTo({ left: t.dataset.i * sc.clientWidth, behavior: 'smooth' });
+    if (t?.dataset.nav) sc.scrollBy({ left: t.dataset.nav * sc.clientWidth, behavior: 'smooth' });
+  });
 }
 
 function renderBar() {
@@ -120,6 +154,7 @@ document.addEventListener('click', (e) => {
   const btn = e.target.closest('[data-act], #cartBar'); if (!btn) return;
   if (btn.id === 'cartBar') return showCart();
   const { act, id } = btn.dataset, sheetOpen = !$('#sheet').classList.contains('hidden');
+  if (act === 'gallery') return openGallery(id);
   if (act === 'inc') cart.set(id, cart.qty(id) + 1);
   if (act === 'dec') cart.set(id, cart.qty(id) - 1);
   if (act === 'del') cart.remove(id);
@@ -135,6 +170,8 @@ document.addEventListener('click', (e) => {
   try {
     [products, settings] = await Promise.all([api.getProducts(), api.getSettings()]);
     if (settings.info_text) $('#info').textContent = settings.info_text;
+    // Buang dari keranjang produk yang sudah tidak bisa dipesan (ditutup / segera hadir / dihapus)
+    cart.entries().forEach(([id]) => { const p = products.find(x => x.id === id); if (!p || poState(p) !== 'open') cart.remove(id); });
     renderProducts(); startCountdown();
   } catch (e) { toast('Gagal memuat produk: ' + e.message); }
   finally { $('#loading').remove(); }

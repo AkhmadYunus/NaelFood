@@ -11,19 +11,26 @@ import { requireLogin, nav, get, post, $, rp, esc, toast, openModal, closeModal,
 requireLogin(); nav('products');
 const PH = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#FFF1E3"/><path d="M16 58c0-17 14-30 32-30s32 13 32 30c0 4-3 7-7 7H23c-4 0-7-3-7-7z" fill="#FF7A00"/></svg>');
 const on = (v) => v === true || v === 'TRUE';
+const ST = [['open', 'Open PO'], ['closed', 'Tutup PO'], ['soon', 'Coming Soon']];
+const stOf = (p) => ['closed', 'soon'].includes(p.po_status) ? p.po_status : 'open';   // kosong = open (produk lama)
+const extras = (p) => String(p.extra_images || '').split(',').map(s => s.trim()).filter(Boolean);
+const MAX_PHOTOS = 6;   // 1 utama + 5 tambahan
 let prods = [], cats = [];
 
 async function load() { [prods, cats] = await Promise.all([get('adminProducts'), get('categories')]); render(); }
 function render() {
-  $('#list').innerHTML = prods.map(p => `<article class="card p-3 flex gap-3 ${on(p.active) ? '' : 'opacity-60'}">
-    <img src="${esc(p.image_url) || PH}" onerror="this.onerror=null;this.src='${PH}'" class="w-20 h-20 rounded-2xl object-cover shrink-0" alt="">
+  $('#list').innerHTML = prods.map(p => {
+    const main = p.image_url || extras(p)[0], n = (p.image_url ? 1 : 0) + extras(p).length;
+    return `<article class="card p-3 flex gap-3 ${on(p.active) ? '' : 'opacity-60'}">
+    <img src="${esc(main) || PH}" onerror="this.onerror=null;this.src='${PH}'" class="w-20 h-20 rounded-2xl object-cover shrink-0" alt="">
     <div class="flex-1 min-w-0"><b class="block truncate">${esc(p.name)}</b>
-      <div class="text-xs text-stone-500">${esc(p.category) || 'Tanpa kategori'} · isi ${esc(p.pack)} ${esc(p.unit)}</div>
+      <div class="text-xs text-stone-500">${esc(p.category) || 'Tanpa kategori'} · isi ${esc(p.pack)} ${esc(p.unit)} · ${n} foto</div>
       <div class="text-orange-500 font-bold">${rp(p.price)}</div>
+      <select data-st="${esc(p.id)}" class="inp !py-1 !px-2 !text-xs !w-auto mt-1" aria-label="Status PO">${ST.map(([v, t]) => `<option value="${v}" ${stOf(p) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
       <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm">
         <button class="font-semibold ${on(p.active) ? 'text-green-600' : 'text-stone-500'}" data-act="tog" data-id="${esc(p.id)}">${on(p.active) ? 'Aktif' : 'Nonaktif'}</button>
         <button class="text-orange-600 font-semibold" data-act="edit" data-id="${esc(p.id)}">Edit</button>
-        <button class="btnr" data-act="del" data-id="${esc(p.id)}">Hapus</button></div></div></article>`).join('') || '<p class="text-stone-500">Belum ada produk.</p>';
+        <button class="btnr" data-act="del" data-id="${esc(p.id)}">Hapus</button></div></div></article>`; }).join('') || '<p class="text-stone-500">Belum ada produk.</p>';
 }
 
 // Perkecil gambar di browser (maks 1000px, JPEG) sebelum dikirim ke Drive
@@ -36,48 +43,82 @@ async function toBase64(file) {
 
 function openForm(p = {}) {
   const f = (id, label, val = '', attrs = '') => `<div><label class="lbl" for="${id}">${label}</label><input id="${id}" class="inp" value="${esc(val)}" ${attrs}></div>`;
+  // photos[0] = foto utama, sisanya foto tambahan. Item baru punya `file` + `preview` dan diunggah saat Simpan.
+  let photos = [p.image_url, ...extras(p)].filter(Boolean).map(url => ({ url }));
   const m = openModal(`<h2 class="font-extrabold text-lg mb-3">${p.id ? 'Edit' : 'Tambah'} produk</h2><div class="grid gap-3">
     ${f('fName', 'Nama produk *', p.name, 'maxlength=80')}
     <div><label class="lbl" for="fCat">Kategori</label><select id="fCat" class="inp"><option value="">Tanpa kategori</option>
       ${cats.map(c => `<option ${c.name === p.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
     <div><label class="lbl" for="fDesc">Deskripsi</label><textarea id="fDesc" class="inp" rows="2" maxlength="300">${esc(p.description)}</textarea></div>
     <div class="grid grid-cols-3 gap-2">${f('fPrice', 'Harga *', p.price, 'type=number min=0')}${f('fPack', 'Isi/pack', p.pack || 10, 'type=number min=1')}${f('fUnit', 'Satuan', p.unit || 'pcs')}</div>
-    <div class="grid grid-cols-2 gap-2">${f('fStart', 'Mulai PO', toLocalInput(p.po_start), 'type=datetime-local')}${f('fEnd', 'Tutup PO', toLocalInput(p.po_end), 'type=datetime-local')}</div>
+    <div><label class="lbl" for="fSt">Status PO</label><select id="fSt" class="inp">${ST.map(([v, t]) => `<option value="${v}" ${stOf(p) === v ? 'selected' : ''}>${t}</option>`).join('')}</select>
+      <p class="text-xs text-stone-500 mt-1">Open PO tetap mengikuti tanggal & kuota di bawah. Tutup PO / Coming Soon langsung berlaku.</p></div>
+    <div class="grid grid-cols-2 gap-2">${f('fStart', 'Mulai PO (opsional)', toLocalInput(p.po_start), 'type=datetime-local')}${f('fEnd', 'Tutup PO (opsional)', toLocalInput(p.po_end), 'type=datetime-local')}</div>
     <div class="grid grid-cols-2 gap-2">${f('fQuota', 'Kuota (0 = tanpa batas)', p.quota || 0, 'type=number min=0')}${f('fStock', 'Stok (opsional)', p.stock, 'type=number min=0')}</div>
     <label class="flex gap-2 items-center text-sm"><input id="fAct" type="checkbox" ${p.id && !on(p.active) ? '' : 'checked'}> Aktif (tampil di halaman pelanggan)</label>
     <label class="flex gap-2 items-center text-sm"><input id="fBest" type="checkbox" ${on(p.bestseller) ? 'checked' : ''}> Best Seller</label>
-    <div><label class="lbl">Foto utama (JPG/PNG/WEBP, maks 5 MB)</label>
-      <img id="prev" src="${esc(p.image_url) || PH}" class="w-28 h-28 rounded-2xl object-cover mb-2" alt="Preview">
-      <input id="fFile" type="file" accept="image/jpeg,image/png,image/webp" class="text-sm"></div>
+    <div><label class="lbl">Foto produk: 1 utama + maks 5 tambahan (JPG/PNG/WEBP, maks 5 MB per foto)</label>
+      <div id="photos" class="grid grid-cols-3 gap-2 mb-2"></div>
+      <input id="fFile" type="file" accept="image/jpeg,image/png,image/webp" multiple class="text-sm"></div>
     <p id="err" class="text-red-500 text-sm hidden"></p>
     <div class="flex gap-2 justify-end"><button id="cancel" class="btn2">Batal</button><button id="save" class="btn">Simpan</button></div></div>`);
-  const q = (s) => m.querySelector(s); let file = null;
+  const q = (s) => m.querySelector(s);
   const fail = (t) => { q('#err').textContent = t; q('#err').classList.remove('hidden'); };
+  const draw = () => {
+    q('#photos').innerHTML = photos.map((ph, i) => `<div class="relative"><img src="${esc(ph.preview || ph.url)}" class="w-full aspect-square object-cover rounded-xl" alt="Foto ${i + 1}">
+      ${i === 0 ? '<span class="absolute top-1 left-1 text-[10px] bg-orange-500 text-white rounded px-1.5">Utama</span>'
+        : `<button type="button" data-main="${i}" class="absolute top-1 left-1 text-[10px] bg-black/60 text-white rounded px-1.5">Jadikan utama</button>`}
+      <button type="button" data-rm="${i}" class="absolute top-1 right-1 bg-black/60 text-white rounded-full w-6 h-6 leading-none" aria-label="Hapus foto">×</button></div>`).join('')
+      || `<img src="${PH}" class="w-full aspect-square rounded-xl object-cover" alt="Belum ada foto">`;
+  };
+  draw();
   q('#cancel').onclick = closeModal;
-  q('#fFile').onchange = (e) => {
-    const x = e.target.files[0]; if (!x) return;
-    if (!/^image\/(jpeg|png|webp)$/.test(x.type)) { e.target.value = ''; return fail('Format harus JPG, PNG, atau WEBP.'); }
-    if (x.size > 5 * 1024 * 1024) { e.target.value = ''; return fail('Ukuran maksimum 5 MB.'); }
-    file = x; q('#err').classList.add('hidden'); q('#prev').src = URL.createObjectURL(x); // preview sebelum upload
+  q('#photos').onclick = (e) => {
+    const rm = e.target.closest('[data-rm]'), mk = e.target.closest('[data-main]');
+    if (rm) photos.splice(+rm.dataset.rm, 1);
+    if (mk) photos.unshift(photos.splice(+mk.dataset.main, 1)[0]);
+    draw();
+  };
+  q('#fFile').onchange = (e) => {   // preview sebelum upload
+    for (const x of e.target.files) {
+      if (photos.length >= MAX_PHOTOS) { fail('Maksimal 6 foto (1 utama + 5 tambahan).'); break; }
+      if (!/^image\/(jpeg|png|webp)$/.test(x.type)) { fail('Format harus JPG, PNG, atau WEBP.'); continue; }
+      if (x.size > 5 * 1024 * 1024) { fail(`"${x.name}" lebih dari 5 MB.`); continue; }
+      q('#err').classList.add('hidden'); photos.push({ file: x, preview: URL.createObjectURL(x) });
+    }
+    e.target.value = ''; draw();
   };
   q('#save').onclick = async () => {
     const name = q('#fName').value.trim(), price = Number(q('#fPrice').value);
     if (!name) return fail('Nama produk wajib diisi.');
     if (!(price > 0)) return fail('Harga harus lebih dari 0.');
-    q('#save').disabled = true; q('#save').textContent = file ? 'Mengunggah foto…' : 'Menyimpan…';
+    q('#save').disabled = true;
     try {
-      let image_url = p.image_url || '';
-      if (file) image_url = (await post({ action: 'uploadImage', image: await toBase64(file), mime: 'image/jpeg', filename: name + '.jpg' })).url;
+      const todo = photos.filter(x => x.file).length; let n = 0;
+      for (const ph of photos) if (ph.file) {
+        q('#save').textContent = `Mengunggah foto ${++n}/${todo}…`;
+        ph.url = (await post({ action: 'uploadImage', image: await toBase64(ph.file), mime: 'image/jpeg', filename: name + '.jpg' })).url;
+        delete ph.file;     // jika simpan gagal lalu diulang, foto yang sudah terunggah tidak diunggah lagi
+      }
+      q('#save').textContent = 'Menyimpan…';
       const iso = (v) => v ? new Date(v).toISOString() : '';
       await post({ action: 'saveProduct', product: { ...p, name, category: q('#fCat').value, description: q('#fDesc').value.trim(), price,
         pack: Number(q('#fPack').value) || 1, unit: q('#fUnit').value.trim() || 'pcs', stock: q('#fStock').value, quota: Number(q('#fQuota').value) || 0,
-        po_start: iso(q('#fStart').value), po_end: iso(q('#fEnd').value), active: q('#fAct').checked, bestseller: q('#fBest').checked, image_url } });
+        po_status: q('#fSt').value, po_start: iso(q('#fStart').value), po_end: iso(q('#fEnd').value),
+        active: q('#fAct').checked, bestseller: q('#fBest').checked,
+        image_url: photos[0]?.url || '', extra_images: photos.slice(1).map(x => x.url).join(',') } });
       closeModal(); toast('Produk disimpan'); await load();
     } catch (x) { fail(x.message); q('#save').disabled = false; q('#save').textContent = 'Simpan'; }
   };
 }
 
 $('#add').onclick = () => openForm();
+$('#list').addEventListener('change', async (e) => {            // ubah status PO langsung dari daftar
+  const sel = e.target.closest('[data-st]'); if (!sel) return;
+  const p = prods.find(x => String(x.id) === sel.dataset.st);
+  try { await post({ action: 'saveProduct', product: { ...p, po_status: sel.value } }); toast('Status PO diperbarui'); } catch (x) { toast(x.message, true); }
+  await load();
+});
 $('#list').addEventListener('click', async (e) => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   const p = prods.find(x => String(x.id) === b.dataset.id);

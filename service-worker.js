@@ -1,5 +1,5 @@
 // Service Worker Nael Food. NAIKKAN nomor VERSION setiap rilis agar pengguna mendapat versi baru.
-const VERSION = 'v2';
+const VERSION = 'v3';
 const CACHE = 'nael-food-' + VERSION;
 const SHELL = ['./', './index.html', './css/style.css', './js/app.js', './js/api.js', './js/cart.js', './manifest.json',
   './assets/images/icon-192.png', './assets/images/apple-touch-icon.png'];

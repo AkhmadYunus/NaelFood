@@ -1,0 +1,87 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"><title>Admin Users – Nael Food Admin</title></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-3xl mx-auto p-4">
+  <div class="flex justify-between items-center mb-3"><h1 class="text-xl font-extrabold">Admin Users</h1><button id="add" class="btn">+ Tambah admin</button></div>
+  <p id="hint" class="text-xs text-stone-500 mb-3"></p>
+  <div id="list" class="grid gap-3"></div>
+</main>
+<script type="module">
+import { requireLogin, nav, get, post, $, esc, toast, openModal, closeModal, me, logout } from './admin.js';
+requireLogin(); nav('users');
+const meU = me(), iAmSuper = meU.role === 'superadmin';
+const ROLE = { superadmin: 'Super Admin', admin: 'Admin' };
+const same = (a, b) => String(a).toLowerCase() === String(b).toLowerCase();
+const canManage = (u) => iAmSuper || u.role !== 'superadmin';   // Admin tidak boleh menyentuh Super Admin (backend juga memeriksa)
+let users = [];
+$('#hint').textContent = iAmSuper ? 'Anda Super Admin: dapat mengelola semua admin.' : 'Anda Admin: tidak dapat mengubah atau membuat Super Admin.';
+
+async function load() { users = await get('users'); render(); }
+function render() {
+  $('#list').innerHTML = users.map(u => {
+    const self = same(u.username, meU.username), ok = canManage(u);
+    return `<article class="card p-4 flex flex-wrap items-center justify-between gap-2 ${u.status === 'nonaktif' ? 'opacity-60' : ''}">
+      <div class="min-w-0"><b>${esc(u.name)}</b> ${self ? '<span class="text-xs text-orange-600">(Anda)</span>' : ''}
+        <div class="text-xs text-stone-500">@${esc(u.username)}</div>
+        <div class="mt-1 flex gap-2 text-[11px]"><span class="px-2 py-0.5 rounded-full ${u.role === 'superadmin' ? 'bg-orange-100 text-orange-700' : 'bg-stone-200 text-stone-700'}">${ROLE[u.role]}</span>
+          <span class="px-2 py-0.5 rounded-full ${u.status === 'aktif' ? 'bg-green-100 text-green-700' : 'bg-stone-300 text-stone-600'}">${u.status === 'aktif' ? 'Aktif' : 'Nonaktif'}</span></div></div>
+      <div class="flex flex-wrap gap-3 text-sm">${ok ? `
+        <button class="text-orange-600 font-semibold" data-act="edit" data-u="${esc(u.username)}">Edit</button>
+        ${self ? '' : `<button class="font-semibold text-stone-600 dark:text-stone-300" data-act="reset" data-u="${esc(u.username)}">Reset password</button>
+        <button class="btnr" data-act="tog" data-u="${esc(u.username)}">${u.status === 'aktif' ? 'Nonaktifkan' : 'Aktifkan'}</button>`}`
+        : '<span class="text-xs text-stone-500">Hanya Super Admin</span>'}</div></article>`; }).join('');
+}
+
+function openForm(u) {
+  const isNew = !u, f = (id, label, val = '', attrs = '') => `<div><label class="lbl" for="${id}">${label}</label><input id="${id}" class="inp" value="${esc(val)}" ${attrs}></div>`;
+  const m = openModal(`<h2 class="font-extrabold text-lg mb-3">${isNew ? 'Tambah' : 'Edit'} admin</h2><div class="grid gap-3">
+    ${f('fUser', 'Username * (huruf kecil, angka, . _ -)', u?.username, 'maxlength=30 autocapitalize=none')}
+    ${f('fName', 'Nama', u?.name, 'maxlength=60')}
+    <div><label class="lbl" for="fRole">Role</label><select id="fRole" class="inp"><option value="admin" ${u?.role === 'admin' ? 'selected' : ''}>Admin</option>
+      ${iAmSuper ? `<option value="superadmin" ${u?.role === 'superadmin' ? 'selected' : ''}>Super Admin</option>` : ''}</select></div>
+    <div><label class="lbl" for="fSt">Status</label><select id="fSt" class="inp" ${u && same(u.username, meU.username) ? 'disabled' : ''}>
+      <option value="aktif" ${u?.status !== 'nonaktif' ? 'selected' : ''}>Aktif</option><option value="nonaktif" ${u?.status === 'nonaktif' ? 'selected' : ''}>Nonaktif</option></select></div>
+    ${isNew ? f('fPw', 'Password awal * (min. 10 karakter)', '', 'type=password autocomplete=new-password') : ''}
+    <p id="err" class="text-red-500 text-sm hidden"></p>
+    <div class="flex gap-2 justify-end"><button id="cancel" class="btn2">Batal</button><button id="save" class="btn">Simpan</button></div></div>`);
+  const q = (s) => m.querySelector(s);
+  q('#cancel').onclick = closeModal;
+  q('#save').onclick = async () => {
+    q('#save').disabled = true;
+    const user = { username: q('#fUser').value.trim(), name: q('#fName').value.trim(), role: q('#fRole').value, status: q('#fSt').value, password: q('#fPw')?.value };
+    try {
+      await post({ action: 'saveUser', key: u?.username, user });
+      closeModal(); toast('Admin disimpan');
+      if (u && same(u.username, meU.username) && !same(user.username, u.username)) { toast('Username diganti. Silakan login ulang.'); return setTimeout(logout, 1500); }
+      await load();
+    } catch (x) { q('#err').textContent = x.message; q('#err').classList.remove('hidden'); q('#save').disabled = false; }
+  };
+}
+
+$('#add').onclick = () => openForm();
+$('#list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const u = users.find(x => x.username === b.dataset.u);
+  try {
+    if (b.dataset.act === 'edit') return openForm(u);
+    if (b.dataset.act === 'tog') {
+      const next = u.status === 'aktif' ? 'nonaktif' : 'aktif';
+      if (next === 'nonaktif' && !confirm(`Nonaktifkan @${u.username}? Ia langsung keluar dan tidak bisa login.`)) return;
+      await post({ action: 'saveUser', key: u.username, user: { ...u, status: next } }); toast(next === 'aktif' ? 'Admin diaktifkan' : 'Admin dinonaktifkan');
+    }
+    if (b.dataset.act === 'reset') {
+      if (!confirm(`Reset password @${u.username}? Semua sesinya akan keluar.`)) return;
+      const r = await post({ action: 'resetPassword', username: u.username });
+      const m = openModal(`<h2 class="font-extrabold text-lg">Password sementara</h2>
+        <p class="text-sm text-stone-500 my-2">Untuk @${esc(r.username)}. Catat sekarang, tidak akan ditampilkan lagi. Minta ia menggantinya lewat menu Akun setelah login.</p>
+        <code class="block text-lg font-bold bg-stone-100 dark:bg-neutral-700 rounded-xl p-3 text-center select-all">${esc(r.password)}</code>
+        <div class="flex gap-2 justify-end mt-4"><button id="cp" class="btn2">Salin</button><button id="ok" class="btn">Selesai</button></div>`);
+      m.querySelector('#cp').onclick = () => navigator.clipboard?.writeText(r.password).then(() => toast('Tersalin'));
+      m.querySelector('#ok').onclick = closeModal; return;
+    }
+    await load();
+  } catch (x) { toast(x.message, true); }
+});
+load().catch(x => toast(x.message, true));
+</script></body></html>
