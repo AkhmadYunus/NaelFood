@@ -37,3 +37,5 @@ Relasi: Orders 1—N OrderItems; Products N—1 Categories; OrderItems N—1 Pro
 
 Produk yang ditambah di sheet Products langsung tampil di aplikasi tanpa deploy ulang.
 Nael Food
+# NaelFood
+Web-based Open PO management system for NaelFood integrated with Google Sheets and Admin Dashboard.
