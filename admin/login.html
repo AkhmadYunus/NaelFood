@@ -1,0 +1,22 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"><title>Login Admin – Nael Food</title></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="min-h-screen grid place-items-center p-5">
+  <form id="f" class="card w-full max-w-sm p-6 grid gap-3">
+    <h1 class="text-xl font-extrabold text-orange-500">Nael Food Admin</h1>
+    <input id="u" class="inp" placeholder="Username" autocomplete="username" required>
+    <input id="p" class="inp" type="password" placeholder="Password" autocomplete="current-password" required>
+    <p id="err" class="text-sm text-red-500 hidden"></p>
+    <button id="b" class="bg-orange-500 text-white rounded-2xl py-3 font-bold disabled:opacity-50">Masuk</button>
+  </form>
+</main>
+<script type="module">
+import { login, session, $ } from './admin.js';
+if (session()) location.replace('dashboard.html');
+$('#f').addEventListener('submit', async (e) => {
+  e.preventDefault(); const b = $('#b'); b.disabled = true; b.textContent = 'Memeriksa…'; $('#err').classList.add('hidden');
+  try { await login($('#u').value.trim(), $('#p').value); location.replace('dashboard.html'); }
+  catch (x) { $('#err').textContent = x.message; $('#err').classList.remove('hidden'); b.disabled = false; b.textContent = 'Masuk'; }
+});
+</script></body></html>

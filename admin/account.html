@@ -1,0 +1,26 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<title>Akun – Nael Food Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-md mx-auto p-4">
+  <h1 class="text-xl font-extrabold mb-3">Ganti Password</h1>
+  <form id="f" class="card p-5 grid gap-3">
+    <input id="o" class="inp" type="password" placeholder="Password lama" autocomplete="current-password" required>
+    <input id="n" class="inp" type="password" placeholder="Password baru (min. 10 karakter)" autocomplete="new-password" minlength="10" required>
+    <input id="c" class="inp" type="password" placeholder="Ulangi password baru" autocomplete="new-password" required>
+    <p id="err" class="text-sm text-red-500 hidden"></p>
+    <button id="b" class="bg-orange-500 text-white rounded-2xl py-3 font-bold disabled:opacity-50">Simpan password</button>
+  </form>
+</main>
+<script type="module">
+import { requireLogin, nav, post, logout, $, toast } from './admin.js';
+requireLogin(); nav('account');
+$('#f').addEventListener('submit', async (e) => {
+  e.preventDefault(); const err = $('#err'); err.classList.add('hidden');
+  if ($('#n').value !== $('#c').value) { err.textContent = 'Konfirmasi password tidak sama.'; return err.classList.remove('hidden'); }
+  $('#b').disabled = true;
+  try { await post({ action: 'changePassword', oldPassword: $('#o').value, newPassword: $('#n').value }); toast('Password diganti. Silakan login ulang.'); setTimeout(logout, 1500); }
+  catch (x) { err.textContent = x.message; err.classList.remove('hidden'); $('#b').disabled = false; }
+});
+</script></body></html>

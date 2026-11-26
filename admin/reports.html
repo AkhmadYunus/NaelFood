@@ -1,0 +1,124 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<title>Laporan – Nael Food Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.2/dist/chart.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<link rel="stylesheet" href="../css/style.css"></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-5xl mx-auto p-4 grid gap-4">
+  <h1 class="text-xl font-extrabold">Laporan & Analytics</h1>
+
+  <!-- Filter periode -->
+  <section class="card p-4 grid gap-3">
+    <div id="presets" class="flex flex-wrap gap-2 text-sm">
+      <button data-p="day" class="btn2">Hari ini</button><button data-p="week" class="btn2">Minggu ini</button>
+      <button data-p="month" class="btn2">Bulan ini</button><button data-p="year" class="btn2">Tahun ini</button><button data-p="all" class="btn2">Semua</button>
+    </div>
+    <div class="grid grid-cols-2 gap-2">
+      <div><label class="lbl" for="from">Dari tanggal (custom)</label><input id="from" type="date" class="inp"></div>
+      <div><label class="lbl" for="to">Sampai tanggal</label><input id="to" type="date" class="inp"></div>
+    </div>
+  </section>
+
+  <section id="cards" class="grid grid-cols-3 gap-3"></section>
+  <section id="status" class="grid grid-cols-2 md:grid-cols-4 gap-3"></section>
+
+  <section class="card p-4"><h2 class="font-bold mb-2">Penjualan Harian <span class="text-xs font-normal text-stone-500">(produk terjual, sesuai periode)</span></h2><div class="relative h-64"><canvas id="cDaily"></canvas></div></section>
+  <div class="grid md:grid-cols-2 gap-4">
+    <section class="card p-4"><h2 class="font-bold mb-2">Penjualan Bulanan <span class="text-xs font-normal text-stone-500">(semua data)</span></h2><div class="relative h-56"><canvas id="cMonthly"></canvas></div></section>
+    <section class="card p-4"><h2 class="font-bold mb-2">Omzet Bulanan <span class="text-xs font-normal text-stone-500">(semua data)</span></h2><div class="relative h-56"><canvas id="cOmzetM"></canvas></div></section>
+    <section class="card p-4"><h2 class="font-bold mb-2">Omzet Tahunan <span class="text-xs font-normal text-stone-500">(semua data)</span></h2><div class="relative h-56"><canvas id="cOmzetY"></canvas></div></section>
+    <section class="card p-4"><h2 class="font-bold mb-2">Produk Terlaris <span class="text-xs font-normal text-stone-500">(sesuai periode)</span></h2><div class="relative h-56"><canvas id="cTop"></canvas></div></section>
+  </div>
+  <section class="card p-4 overflow-x-auto"><h2 class="font-bold mb-2">Top Customer <span class="text-xs font-normal text-stone-500">(sesuai periode)</span></h2>
+    <table class="w-full text-sm"><thead class="text-left text-stone-500"><tr><th class="py-1">#</th><th>Nama</th><th>WhatsApp</th><th>Order</th><th>Total belanja</th></tr></thead><tbody id="custRows"></tbody></table></section>
+
+  <!-- Export -->
+  <section class="card p-4 grid gap-3">
+    <h2 class="font-bold">Export Data</h2>
+    <div class="grid sm:grid-cols-3 gap-2">
+      <div><label class="lbl" for="xt">Jenis data</label><select id="xt" class="inp">
+        <option value="all">Seluruh order</option><option value="range">Order berdasarkan rentang tanggal</option>
+        <option value="status">Order berdasarkan status</option><option value="customer">Order berdasarkan customer</option>
+        <option value="sold">Produk terjual (sesuai rentang tanggal)</option></select></div>
+      <div id="xsBox" class="hidden"><label class="lbl" for="xs">Status</label><select id="xs" class="inp"></select></div>
+      <div id="xcBox" class="hidden"><label class="lbl" for="xc">Customer</label><select id="xc" class="inp"></select></div>
+    </div>
+    <p class="text-xs text-stone-500">Rentang tanggal memakai kolom "Dari/Sampai tanggal" di atas.</p>
+    <div class="flex gap-2"><button id="xx" class="btn">Export Excel</button><button id="xcsv" class="btn2">Export CSV</button></div>
+  </section>
+</main>
+
+<script type="module">
+import { requireLogin, nav, $, rp, esc, toast } from './admin.js';
+import { STATUS, loadData, dayKey, monthKey, yearKey, inRange, presetRange, valid, waKey, qtyByOrder, groupBy, topProducts, topCustomers, orderRows, soldRows, download } from './stats.js';
+requireLogin(); nav('reports');
+if (matchMedia('(prefers-color-scheme: dark)').matches) Chart.defaults.color = '#d6d3d1';
+
+let orders = [], items = [], qty = {};
+const charts = {};
+const lblDay = (k) => new Date(k).toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+const lblMonth = (k) => new Date(k + '-01').toLocaleDateString('id-ID', { month: 'short', year: 'numeric' });
+const money = { scales: { y: { beginAtZero: true, ticks: { callback: (v) => rp(v) } } }, plugins: { legend: { display: false }, tooltip: { callbacks: { label: (c) => rp(c.parsed.y) } } } };
+const plain = { scales: { y: { beginAtZero: true, ticks: { precision: 0 } } }, plugins: { legend: { display: false } } };
+
+function draw(id, type, labels, data, label, opt) {
+  charts[id]?.destroy();
+  charts[id] = new Chart($('#' + id), { type, data: { labels, datasets: [{ label, data, backgroundColor: '#FF7A00', borderColor: '#FF7A00', borderRadius: 6, tension: 0.3 }] },
+    options: { responsive: true, maintainAspectRatio: false, ...opt } });
+}
+
+function render() {
+  const from = $('#from').value, to = $('#to').value;
+  const inR = orders.filter(o => inRange(o, from, to)), ok = valid(inR), all = valid(orders);
+
+  // Ringkasan periode
+  const sold = ok.reduce((s, o) => s + (qty[o.order_id] || 0), 0);
+  $('#cards').innerHTML = [['Order', inR.length], ['Omzet', rp(ok.reduce((s, o) => s + Number(o.total), 0))], ['Produk terjual', sold]]
+    .map(([t, v]) => `<div class="card p-3"><div class="text-xs text-stone-500">${t}</div><div class="text-lg font-extrabold text-orange-500">${esc(v)}</div></div>`).join('');
+
+  // Ringkasan status
+  $('#status').innerHTML = STATUS.map(s => { const l = inR.filter(o => o.status === s);
+    return `<div class="card p-3"><div class="text-xs text-stone-500">${s}</div><div class="text-lg font-extrabold">${l.length}</div><div class="text-xs text-stone-500">${rp(l.reduce((a, o) => a + Number(o.total), 0))}</div></div>`; }).join('');
+
+  // Chart (harian, produk terlaris = periode; bulanan/tahunan = seluruh data)
+  const d = groupBy(ok, dayKey, qty), m = groupBy(all, monthKey, qty), y = groupBy(all, yearKey, qty), tp = topProducts(ok, items).slice(0, 5);
+  draw('cDaily', 'bar', d.map(r => lblDay(r.key)), d.map(r => r.qty), 'Produk terjual', plain);
+  draw('cMonthly', 'bar', m.map(r => lblMonth(r.key)), m.map(r => r.qty), 'Produk terjual', plain);
+  draw('cOmzetM', 'line', m.map(r => lblMonth(r.key)), m.map(r => r.omzet), 'Omzet', money);
+  draw('cOmzetY', 'bar', y.map(r => r.key), y.map(r => r.omzet), 'Omzet', money);
+  draw('cTop', 'bar', tp.map(p => p.name), tp.map(p => p.qty), 'Terjual', { ...plain, indexAxis: 'y', scales: { x: { beginAtZero: true, ticks: { precision: 0 } } } });
+
+  // Top customer
+  $('#custRows').innerHTML = topCustomers(ok).slice(0, 10).map((c, i) => `<tr class="border-t border-stone-200 dark:border-neutral-700"><td class="py-2">${i + 1}</td>
+    <td class="font-semibold">${esc(c.name)}</td><td>${esc(c.wa)}</td><td>${c.orders}</td><td>${rp(c.omzet)}</td></tr>`).join('')
+    || '<tr><td colspan="5" class="py-4 text-center text-stone-500">Belum ada data.</td></tr>';
+}
+
+function setRange(p) { const [f, t] = presetRange(p); $('#from').value = f; $('#to').value = t; render(); }
+
+/* ---------- Export ---------- */
+function exportNow(fmt) {
+  const t = $('#xt').value, from = $('#from').value, to = $('#to').value;
+  let list = orders, name = 'order-semua', rows;
+  if (t === 'range') { list = orders.filter(o => inRange(o, from, to)); name = 'order-rentang'; }
+  if (t === 'status') { list = orders.filter(o => o.status === $('#xs').value); name = 'order-' + $('#xs').value.toLowerCase(); }
+  if (t === 'customer') { list = orders.filter(o => (waKey(o.whatsapp) || o.name) === $('#xc').value); name = 'order-customer'; }
+  rows = t === 'sold' ? soldRows(orders.filter(o => inRange(o, from, to)), items) : orderRows(list, items);
+  if (t === 'sold') name = 'produk-terjual';
+  if (!download(rows, fmt, name)) toast('Tidak ada data untuk diekspor', true);
+}
+$('#xt').onchange = () => { $('#xsBox').classList.toggle('hidden', $('#xt').value !== 'status'); $('#xcBox').classList.toggle('hidden', $('#xt').value !== 'customer'); };
+$('#xx').onclick = () => exportNow('xlsx');
+$('#xcsv').onclick = () => exportNow('csv');
+$('#presets').onclick = (e) => { const b = e.target.closest('[data-p]'); if (b) setRange(b.dataset.p); };
+$('#from').onchange = $('#to').onchange = render;   // custom range
+
+try {
+  ({ orders, items } = await loadData()); qty = qtyByOrder(items);
+  $('#xs').innerHTML = STATUS.map(s => `<option>${s}</option>`).join('');
+  $('#xc').innerHTML = topCustomers(orders).map(c => `<option value="${esc(c.key)}">${esc(c.name)} (${esc(c.wa)})</option>`).join('');
+  setRange('month');
+} catch (e) { toast(e.message, true); }
+</script></body></html>
