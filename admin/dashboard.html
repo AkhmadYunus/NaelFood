@@ -1,0 +1,28 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<title>Dashboard – Nael Food Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-5xl mx-auto p-4">
+  <div class="flex justify-between items-center mb-3"><h1 class="text-xl font-extrabold">Dashboard</h1><a href="reports.html" class="btn">Lihat Laporan →</a></div>
+  <div id="stats" class="grid grid-cols-2 md:grid-cols-3 gap-3"><p class="col-span-full text-stone-500">Memuat…</p></div>
+  <p class="text-xs text-stone-500 mt-3">Omzet, produk terjual, produk terlaris, dan customer teraktif tidak menghitung order berstatus Dibatalkan.</p>
+</main>
+<script type="module">
+import { requireLogin, nav, get, $, rp, esc, toast } from './admin.js';
+import { loadData, valid, topProducts, topCustomers } from './stats.js';
+requireLogin(); nav('dashboard');
+try {
+  const [{ orders, items }, prods] = await Promise.all([loadData(), get('adminProducts')]);
+  const ok = valid(orders), tp = topProducts(ok, items)[0], tc = topCustomers(ok)[0];
+  const cards = [
+    ['Total Order', orders.length],
+    ['Total Omzet', rp(ok.reduce((s, o) => s + Number(o.total), 0))],
+    ['Produk Terjual', topProducts(ok, items).reduce((s, p) => s + p.qty, 0)],
+    ['Produk Terlaris', tp ? `${tp.name} (${tp.qty})` : '-'],
+    ['Customer Teraktif', tc ? `${tc.name} (${tc.orders} order)` : '-'],
+    ['Produk Aktif', prods.filter(p => p.active === true || p.active === 'TRUE').length],
+  ];
+  $('#stats').innerHTML = cards.map(([t, v]) => `<div class="card p-4"><div class="text-sm text-stone-500">${t}</div><div class="text-xl font-extrabold text-orange-500 mt-1 break-words">${esc(v)}</div></div>`).join('');
+} catch (e) { toast(e.message, true); }
+</script></body></html>

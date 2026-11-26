@@ -1,0 +1,42 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"><title>Kategori – Nael Food Admin</title></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-xl mx-auto p-4">
+  <h1 class="text-xl font-extrabold mb-3">Kategori</h1>
+  <form id="f" class="flex gap-2 mb-4"><input id="n" class="inp" placeholder="Nama kategori baru" maxlength="40" required><button class="btn shrink-0">Tambah</button></form>
+  <div id="list" class="grid gap-2"></div>
+</main>
+<script type="module">
+import { requireLogin, nav, get, post, $, esc, toast } from './admin.js';
+requireLogin(); nav('categories');
+let cats = [];
+async function load() { cats = await get('categories'); render(); }
+function render() {
+  $('#list').innerHTML = cats.map(c => `<div class="card p-3 flex items-center justify-between gap-2"><b>${esc(c.name)}</b>
+    <div class="flex gap-3"><button class="text-orange-600 font-semibold text-sm" data-act="edit" data-id="${esc(c.id)}">Edit</button>
+    <button class="btnr" data-act="del" data-id="${esc(c.id)}">Hapus</button></div></div>`).join('') || '<p class="text-stone-500">Belum ada kategori.</p>';
+}
+$('#f').addEventListener('submit', async (e) => {
+  e.preventDefault(); const name = $('#n').value.trim(); if (!name) return;
+  try { await post({ action: 'saveCategory', category: { name } }); $('#n').value = ''; toast('Kategori ditambahkan'); await load(); } catch (x) { toast(x.message, true); }
+});
+$('#list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const c = cats.find(x => String(x.id) === b.dataset.id);
+  try {
+    if (b.dataset.act === 'edit') {
+      const name = (prompt('Nama kategori:', c.name) || '').trim(); if (!name || name === c.name) return;
+      await post({ action: 'saveCategory', category: { id: c.id, name } });
+      // Produk memakai NAMA kategori, jadi ikut diperbarui agar tidak yatim
+      const prods = await get('adminProducts');
+      for (const p of prods.filter(p => p.category === c.name)) await post({ action: 'saveProduct', product: { ...p, category: name } });
+      toast('Kategori diperbarui');
+    } else if (confirm('Hapus kategori "' + c.name + '"? Produk di dalamnya tidak ikut terhapus.')) {
+      await post({ action: 'deleteCategory', id: c.id }); toast('Kategori dihapus');
+    }
+    await load();
+  } catch (x) { toast(x.message, true); }
+});
+load().catch(x => toast(x.message, true));
+</script></body></html>

@@ -1,0 +1,92 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css"><title>Produk – Nael Food Admin</title></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-5xl mx-auto p-4">
+  <div class="flex justify-between items-center mb-3"><h1 class="text-xl font-extrabold">Produk</h1><button id="add" class="btn">+ Tambah produk</button></div>
+  <div id="list" class="grid gap-3 md:grid-cols-2"></div>
+</main>
+<script type="module">
+import { requireLogin, nav, get, post, $, rp, esc, toast, openModal, closeModal, toLocalInput } from './admin.js';
+requireLogin(); nav('products');
+const PH = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96"><rect width="96" height="96" fill="#FFF1E3"/><path d="M16 58c0-17 14-30 32-30s32 13 32 30c0 4-3 7-7 7H23c-4 0-7-3-7-7z" fill="#FF7A00"/></svg>');
+const on = (v) => v === true || v === 'TRUE';
+let prods = [], cats = [];
+
+async function load() { [prods, cats] = await Promise.all([get('adminProducts'), get('categories')]); render(); }
+function render() {
+  $('#list').innerHTML = prods.map(p => `<article class="card p-3 flex gap-3 ${on(p.active) ? '' : 'opacity-60'}">
+    <img src="${esc(p.image_url) || PH}" onerror="this.onerror=null;this.src='${PH}'" class="w-20 h-20 rounded-2xl object-cover shrink-0" alt="">
+    <div class="flex-1 min-w-0"><b class="block truncate">${esc(p.name)}</b>
+      <div class="text-xs text-stone-500">${esc(p.category) || 'Tanpa kategori'} · isi ${esc(p.pack)} ${esc(p.unit)}</div>
+      <div class="text-orange-500 font-bold">${rp(p.price)}</div>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 mt-1 text-sm">
+        <button class="font-semibold ${on(p.active) ? 'text-green-600' : 'text-stone-500'}" data-act="tog" data-id="${esc(p.id)}">${on(p.active) ? 'Aktif' : 'Nonaktif'}</button>
+        <button class="text-orange-600 font-semibold" data-act="edit" data-id="${esc(p.id)}">Edit</button>
+        <button class="btnr" data-act="del" data-id="${esc(p.id)}">Hapus</button></div></div></article>`).join('') || '<p class="text-stone-500">Belum ada produk.</p>';
+}
+
+// Perkecil gambar di browser (maks 1000px, JPEG) sebelum dikirim ke Drive
+async function toBase64(file) {
+  const bmp = await createImageBitmap(file), s = Math.min(1, 1000 / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
+}
+
+function openForm(p = {}) {
+  const f = (id, label, val = '', attrs = '') => `<div><label class="lbl" for="${id}">${label}</label><input id="${id}" class="inp" value="${esc(val)}" ${attrs}></div>`;
+  const m = openModal(`<h2 class="font-extrabold text-lg mb-3">${p.id ? 'Edit' : 'Tambah'} produk</h2><div class="grid gap-3">
+    ${f('fName', 'Nama produk *', p.name, 'maxlength=80')}
+    <div><label class="lbl" for="fCat">Kategori</label><select id="fCat" class="inp"><option value="">Tanpa kategori</option>
+      ${cats.map(c => `<option ${c.name === p.category ? 'selected' : ''}>${esc(c.name)}</option>`).join('')}</select></div>
+    <div><label class="lbl" for="fDesc">Deskripsi</label><textarea id="fDesc" class="inp" rows="2" maxlength="300">${esc(p.description)}</textarea></div>
+    <div class="grid grid-cols-3 gap-2">${f('fPrice', 'Harga *', p.price, 'type=number min=0')}${f('fPack', 'Isi/pack', p.pack || 10, 'type=number min=1')}${f('fUnit', 'Satuan', p.unit || 'pcs')}</div>
+    <div class="grid grid-cols-2 gap-2">${f('fStart', 'Mulai PO', toLocalInput(p.po_start), 'type=datetime-local')}${f('fEnd', 'Tutup PO', toLocalInput(p.po_end), 'type=datetime-local')}</div>
+    <div class="grid grid-cols-2 gap-2">${f('fQuota', 'Kuota (0 = tanpa batas)', p.quota || 0, 'type=number min=0')}${f('fStock', 'Stok (opsional)', p.stock, 'type=number min=0')}</div>
+    <label class="flex gap-2 items-center text-sm"><input id="fAct" type="checkbox" ${p.id && !on(p.active) ? '' : 'checked'}> Aktif (tampil di halaman pelanggan)</label>
+    <label class="flex gap-2 items-center text-sm"><input id="fBest" type="checkbox" ${on(p.bestseller) ? 'checked' : ''}> Best Seller</label>
+    <div><label class="lbl">Foto utama (JPG/PNG/WEBP, maks 5 MB)</label>
+      <img id="prev" src="${esc(p.image_url) || PH}" class="w-28 h-28 rounded-2xl object-cover mb-2" alt="Preview">
+      <input id="fFile" type="file" accept="image/jpeg,image/png,image/webp" class="text-sm"></div>
+    <p id="err" class="text-red-500 text-sm hidden"></p>
+    <div class="flex gap-2 justify-end"><button id="cancel" class="btn2">Batal</button><button id="save" class="btn">Simpan</button></div></div>`);
+  const q = (s) => m.querySelector(s); let file = null;
+  const fail = (t) => { q('#err').textContent = t; q('#err').classList.remove('hidden'); };
+  q('#cancel').onclick = closeModal;
+  q('#fFile').onchange = (e) => {
+    const x = e.target.files[0]; if (!x) return;
+    if (!/^image\/(jpeg|png|webp)$/.test(x.type)) { e.target.value = ''; return fail('Format harus JPG, PNG, atau WEBP.'); }
+    if (x.size > 5 * 1024 * 1024) { e.target.value = ''; return fail('Ukuran maksimum 5 MB.'); }
+    file = x; q('#err').classList.add('hidden'); q('#prev').src = URL.createObjectURL(x); // preview sebelum upload
+  };
+  q('#save').onclick = async () => {
+    const name = q('#fName').value.trim(), price = Number(q('#fPrice').value);
+    if (!name) return fail('Nama produk wajib diisi.');
+    if (!(price > 0)) return fail('Harga harus lebih dari 0.');
+    q('#save').disabled = true; q('#save').textContent = file ? 'Mengunggah foto…' : 'Menyimpan…';
+    try {
+      let image_url = p.image_url || '';
+      if (file) image_url = (await post({ action: 'uploadImage', image: await toBase64(file), mime: 'image/jpeg', filename: name + '.jpg' })).url;
+      const iso = (v) => v ? new Date(v).toISOString() : '';
+      await post({ action: 'saveProduct', product: { ...p, name, category: q('#fCat').value, description: q('#fDesc').value.trim(), price,
+        pack: Number(q('#fPack').value) || 1, unit: q('#fUnit').value.trim() || 'pcs', stock: q('#fStock').value, quota: Number(q('#fQuota').value) || 0,
+        po_start: iso(q('#fStart').value), po_end: iso(q('#fEnd').value), active: q('#fAct').checked, bestseller: q('#fBest').checked, image_url } });
+      closeModal(); toast('Produk disimpan'); await load();
+    } catch (x) { fail(x.message); q('#save').disabled = false; q('#save').textContent = 'Simpan'; }
+  };
+}
+
+$('#add').onclick = () => openForm();
+$('#list').addEventListener('click', async (e) => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  const p = prods.find(x => String(x.id) === b.dataset.id);
+  try {
+    if (b.dataset.act === 'edit') return openForm(p);
+    if (b.dataset.act === 'tog') { await post({ action: 'saveProduct', product: { ...p, active: !on(p.active) } }); toast(on(p.active) ? 'Produk dinonaktifkan' : 'Produk diaktifkan'); }
+    if (b.dataset.act === 'del') { if (!confirm('Hapus "' + p.name + '"? Riwayat order tetap tersimpan.')) return; await post({ action: 'deleteProduct', id: p.id }); toast('Produk dihapus'); }
+    await load();
+  } catch (x) { toast(x.message, true); }
+});
+load().catch(x => toast(x.message, true));
+</script></body></html>
