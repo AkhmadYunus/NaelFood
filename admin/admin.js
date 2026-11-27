@@ -57,7 +57,7 @@ export function openModal(html) {
 export const closeModal = () => $('#modal')?.remove();
 
 export function nav(active) {
-  const L = [['dashboard', 'Dashboard'], ['products', 'Produk'], ['categories', 'Kategori'], ['orders', 'Order'], ['reports', 'Laporan'], ['users', 'Admin Users'], ['account', 'Akun']];
+  const L = [['dashboard', 'Dashboard'], ['products', 'Produk'], ['categories', 'Kategori'], ['orders', 'Order'], ['reports', 'Laporan'], ['print', 'Cetak'], ['users', 'Admin Users'], ['account', 'Akun']];
   document.body.insertAdjacentHTML('afterbegin', `<header class="sticky top-0 z-30 bg-orange-500 text-white">
     <div class="max-w-5xl mx-auto px-4 py-3 flex items-center gap-3">
       <b class="text-lg shrink-0">Nael Food Admin</b>
@@ -65,4 +65,12 @@ export function nav(active) {
         `<a href="${k}.html" class="px-3 py-1.5 rounded-full whitespace-nowrap ${k === active ? 'bg-white text-orange-600 font-bold' : 'hover:bg-orange-600'}">${t}</a>`).join('')}</nav>
       <button id="btnLogout" class="text-sm font-semibold shrink-0">Keluar</button></div></header>`);
   $('#btnLogout').onclick = logout;
+}
+
+// Perkecil gambar di browser (JPEG, sisi terpanjang maks `max` px) -> base64 tanpa prefix, siap untuk uploadImage
+export async function toBase64(file, max = 1000) {
+  const bmp = await createImageBitmap(file), s = Math.min(1, max / Math.max(bmp.width, bmp.height));
+  const c = document.createElement('canvas'); c.width = Math.round(bmp.width * s); c.height = Math.round(bmp.height * s);
+  const x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+  return c.toDataURL('image/jpeg', 0.85).split(',')[1];
 }

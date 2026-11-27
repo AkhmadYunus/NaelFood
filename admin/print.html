@@ -1,0 +1,278 @@
+<!DOCTYPE html><html lang="id"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex"><meta name="theme-color" content="#FF7A00">
+<title>Cetak – Nael Food Admin</title>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;800&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script><script>tailwind.config={darkMode:"media"}</script><link rel="stylesheet" href="../css/style.css">
+<style id="pageStyle">@page{size:100mm 150mm;margin:0}</style>
+<style>
+/* ===== Dokumen cetak (selalu putih/hitam, termasuk saat dark mode) ===== */
+#printRoot{overflow-x:auto;background:#d6d3d1;border-radius:1rem;padding:12px}
+.doc{background:#fff;color:#000;font-family:Arial,Helvetica,sans-serif;box-sizing:border-box;font-size:calc(var(--s,1)*var(--base,12px));line-height:1.25;
+  margin:0 auto 14px;box-shadow:0 2px 10px rgba(0,0,0,.25);break-after:page;page-break-after:always;overflow-wrap:anywhere}
+.doc:last-child{break-after:auto;page-break-after:auto}      /* tidak ada halaman/label kosong di akhir */
+.p46 .doc{width:99mm;padding:4mm}   /* toleransi 1mm: pembulatan ukuran kertas browser tidak memunculkan halaman kosong */
+.pa4 .doc{width:190mm;padding:6mm}
+.pa4 .inv,.pa4 .prod{--base:14px}
+.pa4 .label{margin-left:0}
+.doc .sm{font-size:.85em}
+.doc hr{border:0;border-top:1px dashed #000;margin:.5em 0}
+.kv{display:flex;justify-content:space-between;gap:.6em}
+.hd{display:flex;gap:.6em;align-items:center;margin-bottom:.4em}
+.shop{font-weight:800;font-size:1.5em}
+.logo{max-height:14mm;max-width:28mm;object-fit:contain;filter:grayscale(1) contrast(1.4)}
+.ttl{font-weight:800;letter-spacing:.15em;margin:.3em 0}
+.it{margin:.35em 0}.it .nm{font-weight:700}
+.tot{font-size:1.25em;font-weight:800}
+.nt{margin-top:.5em;border:1px solid #000;padding:.35em}
+.ft{text-align:center;margin-top:.8em}
+/* Label packing: huruf besar agar terbaca dari jauh */
+.label{--base:14px;display:flex;flex-direction:column;gap:.45em}
+.l-id{font-size:1.3em;font-weight:800}
+.l-name{font-size:2.1em;font-weight:900;text-transform:uppercase;line-height:1.05}
+.l-wa{font-size:1.5em;font-weight:800}
+.l-date{font-size:1.15em;font-weight:700;border-top:2px solid #000;border-bottom:2px solid #000;padding:.25em 0}
+.l-items{flex:1;font-size:1.55em;font-weight:800;line-height:1.2}
+.l-note{font-size:1.15em;border:2px dashed #000;padding:.3em}
+.l-st{border:3px solid #000;text-align:center;font-size:1.7em;font-weight:900;padding:.15em}
+.l-shop{text-align:center;font-size:.8em}
+/* Rekap produksi */
+.prod .pr{display:flex;justify-content:space-between;gap:1em;font-size:1.35em;font-weight:800;padding:.25em 0;border-bottom:1px solid #000}
+@media print{
+  html,body{background:#fff!important;color:#000!important;margin:0!important;padding:0!important;min-height:0!important}   /* buang margin bawaan & padding bawah dari style.css */
+  body>header,body>div.fixed,#ui,#bar,.noprint{display:none!important}
+  main{display:block!important;max-width:none!important;padding:0!important;margin:0!important}
+  #printRoot{background:none!important;padding:0!important;overflow:visible!important;border-radius:0!important}
+  .doc{box-shadow:none!important;margin:0 auto!important}
+  .pa4 .inv,.pa4 .prod{padding:0!important}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+}
+</style></head>
+<body class="bg-stone-100 text-stone-900 dark:bg-neutral-900 dark:text-stone-100 min-h-screen">
+<main class="max-w-5xl mx-auto p-4 grid gap-4">
+  <div id="ui" class="grid gap-4">
+    <h1 class="text-xl font-extrabold">Cetak Invoice, Label & Produksi</h1>
+
+    <section class="card p-4 grid gap-3">
+      <div id="tabs" class="flex flex-wrap gap-2"></div>
+      <div class="grid sm:grid-cols-2 gap-2">
+        <div><label class="lbl" for="paper">Ukuran kertas</label><select id="paper" class="inp"><option value="4x6">Label thermal 4 × 6 inci (100 × 150 mm)</option><option value="a4">A4 (printer biasa)</option></select></div>
+        <div><label class="lbl" for="basis">Filter tanggal berdasarkan</label><select id="basis" class="inp"><option value="order">Tanggal order</option><option value="pickup">Tanggal pengambilan (kosong = tanggal order)</option></select></div>
+      </div>
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div class="col-span-2"><label class="lbl" for="q">Cari nama / nomor order</label><input id="q" class="inp"></div>
+        <div><label class="lbl" for="from">Dari tanggal</label><input id="from" type="date" class="inp"></div>
+        <div><label class="lbl" for="to">Sampai tanggal</label><input id="to" type="date" class="inp"></div>
+        <div class="col-span-2"><label class="lbl" for="st">Status</label><select id="st" class="inp"></select></div>
+      </div>
+    </section>
+
+    <section class="card overflow-hidden">
+      <div class="flex items-center justify-between gap-2 p-3 text-sm">
+        <label class="flex items-center gap-2"><input id="all" type="checkbox" class="w-5 h-5 accent-orange-500"> Pilih semua hasil filter</label>
+        <button id="clear" class="text-orange-600 font-semibold">Kosongkan pilihan</button></div>
+      <div id="list" class="max-h-80 overflow-y-auto"></div>
+    </section>
+
+    <details class="card p-4"><summary class="font-bold cursor-pointer">Pengaturan Cetak (nama toko, logo, alamat, footer)</summary>
+      <div class="grid gap-3 mt-3">
+        <div><label class="lbl" for="sName">Nama toko</label><input id="sName" class="inp" maxlength="60"></div>
+        <div><label class="lbl" for="sAddr">Alamat</label><input id="sAddr" class="inp" maxlength="190"></div>
+        <div><label class="lbl" for="sWa">WhatsApp toko (juga dipakai tombol "Kirim ke WhatsApp" pelanggan), contoh 62812xxxxxxx</label><input id="sWa" class="inp" inputmode="tel" maxlength="16"></div>
+        <div><label class="lbl" for="sFoot">Catatan footer</label><input id="sFoot" class="inp" maxlength="190"></div>
+        <div><label class="lbl">Logo (JPG/PNG/WEBP, maks 5 MB)</label>
+          <div class="flex items-center gap-3"><img id="sLogo" class="w-16 h-16 object-contain rounded-xl bg-white hidden" alt="Logo">
+            <input id="sFile" type="file" accept="image/jpeg,image/png,image/webp" class="text-sm"><button id="sRm" class="btnr hidden">Hapus logo</button></div></div>
+        <div class="flex justify-end"><button id="sSave" class="btn">Simpan pengaturan</button></div>
+      </div></details>
+  </div>
+
+  <div id="bar" class="sticky bottom-2 z-20 card p-3 flex flex-wrap items-center gap-2 shadow-xl">
+    <span id="count" class="text-sm font-semibold mr-auto"></span>
+    <button id="bPickup" class="btn2">Atur tgl pengambilan</button><button id="bPdf" class="btn2">Export PDF</button><button id="bPrint" class="btn">Cetak</button>
+  </div>
+  <h2 class="noprint font-bold">Preview</h2>
+  <div id="printRoot" class="p46"></div>
+</main>
+
+<script type="module">
+import { requireLogin, nav, get, post, $, rp, esc, toast, fmtDT, openModal, closeModal, toBase64 } from './admin.js';
+import { loadData, dayKey, STATUS } from './stats.js';
+requireLogin(); nav('print');
+
+const PREF = 'nael_print_prefs', MODES = [['invoice', 'Invoice'], ['label', 'Label Packing'], ['prod', 'Produksi']];
+let prefs = { mode: 'invoice', paper: '4x6' };
+try { Object.assign(prefs, JSON.parse(localStorage.getItem(PREF))); } catch {}
+let orders = [], byOrder = {}, S = {}, logoFile = null, logoRemoved = false;
+const sel = new Set(), pinned = new Set();
+
+/* ---------- Helper ---------- */
+const fmtD = (d) => new Date(d).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' });
+const pickup = (o) => { const s = String(o.pickup_date || '').slice(0, 10); return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : ''; };
+const fmtP = (s) => fmtD(s + 'T00:00:00');
+const eff = (o, basis) => basis === 'pickup' ? (pickup(o) || dayKey(o.created_at)) : dayKey(o.created_at);
+const shop = () => S.business_name || 'Nael Food';
+
+function filtered() {
+  const q = $('#q').value.toLowerCase(), st = $('#st').value, f = $('#from').value, t = $('#to').value, b = $('#basis').value;
+  return orders.filter(o => (st === 'active' ? o.status !== 'Dibatalkan' : !st || o.status === st)
+    && (!q || (o.name + o.order_id).toLowerCase().includes(q)) && (!f || eff(o, b) >= f) && (!t || eff(o, b) <= t));
+}
+// Yang dicetak: order yang dicentang; jika tidak ada, semua hasil filter. Diurutkan nomor order naik.
+const target = () => (sel.size ? orders.filter(o => sel.has(o.order_id)) : filtered()).sort((a, b) => String(a.order_id).localeCompare(String(b.order_id)));
+
+/* ---------- Template dokumen ---------- */
+const logo = () => S.logo_url ? `<img class="logo" src="${esc(S.logo_url)}" alt="">` : '';
+
+function invoice(o) {
+  const its = byOrder[o.order_id] || [];
+  return `<section class="doc inv" ${prefs.paper === '4x6' ? 'data-fit' : ''}>
+    <div class="hd">${logo()}<div><div class="shop">${esc(shop())}</div>${S.address ? `<div class="sm">${esc(S.address)}</div>` : ''}${S.admin_wa ? `<div class="sm">WA: ${esc(S.admin_wa)}</div>` : ''}</div></div>
+    <div class="ttl">INVOICE</div>
+    <div class="kv"><span>No. Order</span><b>${esc(o.order_id)}</b></div>
+    <div class="kv"><span>Tanggal</span><span>${fmtDT(o.created_at)}</span></div>
+    <div class="kv"><span>Customer</span><b>${esc(o.name)}</b></div>
+    <div class="kv"><span>WhatsApp</span><span>${esc(o.whatsapp)}</span></div>
+    <div class="kv"><span>Status</span><b>${esc(o.status)}</b></div><hr>
+    ${its.map(i => `<div class="it"><div class="nm">${esc(i.product_name)}</div><div class="kv"><span>${esc(i.qty)} × ${rp(i.price)}</span><span>${rp(i.subtotal)}</span></div></div>`).join('')}
+    <hr><div class="kv tot"><span>TOTAL</span><span>${rp(o.total)}</span></div>
+    ${o.notes ? `<div class="nt"><b>Catatan:</b> ${esc(o.notes)}</div>` : ''}
+    <div class="ft">Terima kasih telah melakukan pemesanan.${S.footer_note ? `<div class="sm">${esc(S.footer_note)}</div>` : ''}</div></section>`;
+}
+
+function label(o) {
+  const its = byOrder[o.order_id] || [], pk = pickup(o);
+  return `<section class="doc label" data-fit>
+    <div class="l-id">${esc(o.order_id)}</div>
+    <div class="l-name">${esc(o.name)}</div>
+    <div class="l-wa">${esc(o.whatsapp)}</div>
+    <div class="l-date">${pk ? 'AMBIL / KIRIM: ' + fmtP(pk) : 'TGL ORDER: ' + fmtD(o.created_at)}</div>
+    <div class="l-items">${its.map(i => `<div>${esc(i.qty)}x ${esc(i.product_name)}</div>`).join('')}</div>
+    ${o.notes ? `<div class="l-note"><b>CATATAN:</b> ${esc(o.notes)}</div>` : ''}
+    <div class="l-st">${esc(String(o.status).toUpperCase())}</div>
+    <div class="l-shop">${esc(shop())}</div></section>`;
+}
+
+function prod(list) {
+  const m = {}, notes = list.filter(o => o.notes);
+  list.forEach(o => (byOrder[o.order_id] || []).forEach(i => { m[i.product_name] = (m[i.product_name] || 0) + Number(i.qty); }));
+  const rows = Object.entries(m).sort((a, b) => b[1] - a[1]), total = rows.reduce((s, r) => s + r[1], 0);
+  const f = $('#from').value, t = $('#to').value, today = dayKey(new Date());
+  const range = f && t ? (f === t ? fmtP(f) : `${fmtP(f)} – ${fmtP(t)}`) : f ? 'Mulai ' + fmtP(f) : t ? 'Sampai ' + fmtP(t) : 'Semua tanggal';
+  return `<section class="doc prod"><div class="hd">${logo()}<div class="shop">${esc(shop())}</div></div>
+    <div class="ttl">${f === today && t === today ? 'PRODUKSI HARI INI' : 'REKAP PRODUKSI'}</div>
+    <div><b>Tanggal:</b> ${range}</div><div class="sm">Dari ${list.length} order</div><hr>
+    ${rows.map(([n, q]) => `<div class="pr"><span>${esc(n)}</span><span>${q} Pack</span></div>`).join('') || '<p>Tidak ada item.</p>'}
+    <div class="kv tot" style="margin-top:.5em"><span>TOTAL</span><span>${total} Pack</span></div>
+    ${notes.length ? `<hr><b>Catatan pesanan:</b>${notes.map(o => `<div class="sm">• ${esc(o.order_id)} ${esc(o.name)}: ${esc(o.notes)}</div>`).join('')}` : ''}</section>`;
+}
+
+/* ---------- Auto-fit: kecilkan huruf bertahap agar muat 1 lembar; jika tetap tidak muat, lembar memanjang ---------- */
+function fit(root) {
+  root.querySelectorAll('[data-fit]').forEach(el => {
+    let s = 1; el.style.height = '148.5mm'; el.style.overflow = 'hidden'; el.style.setProperty('--s', 1);
+    while (el.scrollHeight > el.clientHeight + 1 && s > 0.72) { s = +(s - 0.04).toFixed(2); el.style.setProperty('--s', s); }
+    if (el.scrollHeight > el.clientHeight + 1) { el.style.height = 'auto'; el.style.minHeight = '148.5mm'; el.style.overflow = 'visible'; }
+  });
+}
+const imagesReady = (root) => Promise.all([...root.querySelectorAll('img')].map(im => im.complete ? 0 : new Promise(r => { im.onload = im.onerror = r; })));
+
+async function render() {
+  const list = target(), root = $('#printRoot');
+  root.className = prefs.paper === 'a4' ? 'pa4' : 'p46';
+  $('#pageStyle').textContent = prefs.paper === 'a4' ? '@page{size:A4;margin:10mm}' : '@page{size:100mm 150mm;margin:0}';
+  const unit = { invoice: 'invoice', label: 'label', prod: 'rekap produksi' }[prefs.mode];
+  $('#count').textContent = list.length ? (prefs.mode === 'prod' ? `Rekap dari ${list.length} order` : `${list.length} ${unit} akan dicetak`) + (sel.size ? ' (terpilih)' : ' (sesuai filter)') : 'Tidak ada order';
+  if (!list.length) { root.innerHTML = '<p class="p-6 text-center">Tidak ada order untuk dicetak.</p>'; return; }
+  root.innerHTML = prefs.mode === 'prod' ? prod(list) : list.map(prefs.mode === 'label' ? label : invoice).join('');
+  await imagesReady(root); fit(root);
+}
+let timer; const schedule = () => { clearTimeout(timer); timer = setTimeout(render, 120); };
+
+/* ---------- UI ---------- */
+function drawTabs() {
+  $('#tabs').innerHTML = MODES.map(([k, t]) => `<button data-mode="${k}" class="${k === prefs.mode ? 'btn' : 'btn2'}">${t}</button>`).join('');
+}
+function drawList() {
+  const list = filtered().sort((a, b) => pinned.has(b.order_id) - pinned.has(a.order_id));
+  $('#list').innerHTML = list.slice(0, 300).map(o => `<label class="flex items-center gap-3 p-3 border-t border-stone-200 dark:border-neutral-700">
+    <input type="checkbox" data-sel="${esc(o.order_id)}" class="w-5 h-5 accent-orange-500 shrink-0" ${sel.has(o.order_id) ? 'checked' : ''}>
+    <div class="flex-1 min-w-0 text-sm"><b>${esc(o.order_id)}</b> · ${esc(o.name)}
+      <div class="text-xs text-stone-500">${fmtDT(o.created_at)} · Ambil: ${pickup(o) ? fmtP(pickup(o)) : '-'} · ${esc(o.status)}</div></div>
+    <b class="text-sm whitespace-nowrap">${rp(o.total)}</b></label>`).join('')
+    + (list.length > 300 ? '<p class="p-3 text-xs text-stone-500">Hanya 300 order pertama yang ditampilkan. Persempit filter.</p>' : '')
+    || '<p class="p-4 text-center text-stone-500">Tidak ada order.</p>';
+  $('#all').checked = list.length > 0 && list.every(o => sel.has(o.order_id));
+}
+const refresh = () => { drawList(); schedule(); };
+
+$('#tabs').onclick = (e) => { const b = e.target.closest('[data-mode]'); if (b) { prefs.mode = b.dataset.mode; save(); drawTabs(); schedule(); } };
+const save = () => localStorage.setItem(PREF, JSON.stringify(prefs));
+$('#paper').onchange = (e) => { prefs.paper = e.target.value; save(); schedule(); };
+['#q', '#st', '#basis', '#from', '#to'].forEach(s => $(s).addEventListener('input', refresh));
+$('#list').addEventListener('change', (e) => { const id = e.target.dataset.sel; if (id) { e.target.checked ? sel.add(id) : sel.delete(id); refresh(); } });
+$('#all').onchange = (e) => { filtered().forEach(o => e.target.checked ? sel.add(o.order_id) : sel.delete(o.order_id)); refresh(); };
+$('#clear').onclick = () => { sel.clear(); pinned.clear(); refresh(); };
+
+/* ---------- Cetak & PDF (dialog cetak browser; pilih "Simpan sebagai PDF" untuk PDF) ---------- */
+async function doPrint(isPdf) {
+  const list = target(); if (!list.length) return toast('Tidak ada order untuk dicetak', true);
+  if (prefs.mode !== 'prod' && list.length > 50 && !confirm(`Cetak ${list.length} lembar sekaligus?`)) return;
+  clearTimeout(timer); await render();
+  const old = document.title, name = { invoice: 'Invoice', label: 'Label-Packing', prod: 'Produksi' }[prefs.mode] + '-' + dayKey(new Date());
+  document.title = name;                                        // nama file default saat disimpan sebagai PDF
+  addEventListener('afterprint', () => { document.title = old; }, { once: true });
+  if (isPdf) toast('Pilih "Simpan sebagai PDF" pada tujuan printer');
+  setTimeout(() => print(), isPdf ? 600 : 0);
+}
+$('#bPrint').onclick = () => doPrint(false);
+$('#bPdf').onclick = () => doPrint(true);
+
+/* ---------- Tanggal pengambilan ---------- */
+$('#bPickup').onclick = () => {
+  const list = target(); if (!list.length) return toast('Tidak ada order', true);
+  const m = openModal(`<h2 class="font-extrabold text-lg">Tanggal pengambilan / pengiriman</h2>
+    <p class="text-sm text-stone-500 my-2">Berlaku untuk ${list.length} order ${sel.size ? 'terpilih' : 'hasil filter'}. Kosongkan untuk menghapus.</p>
+    <input id="pd" type="date" class="inp"><div class="flex gap-2 justify-end mt-4"><button id="pc" class="btn2">Batal</button><button id="ps" class="btn">Simpan</button></div>`);
+  m.querySelector('#pc').onclick = closeModal;
+  m.querySelector('#ps').onclick = async () => {
+    const d = m.querySelector('#pd').value;
+    try { await post({ action: 'setPickup', order_ids: list.map(o => o.order_id), pickup_date: d }); list.forEach(o => { o.pickup_date = d; }); closeModal(); toast('Tanggal pengambilan disimpan'); refresh(); }
+    catch (x) { toast(x.message, true); }
+  };
+};
+
+/* ---------- Pengaturan cetak (sheet Settings) ---------- */
+function fillSettings() {
+  $('#sName').value = S.business_name || ''; $('#sAddr').value = S.address || ''; $('#sWa').value = S.admin_wa || ''; $('#sFoot').value = S.footer_note || '';
+  $('#sLogo').src = S.logo_url || ''; $('#sLogo').classList.toggle('hidden', !S.logo_url); $('#sRm').classList.toggle('hidden', !S.logo_url);
+}
+$('#sFile').onchange = (e) => {
+  const x = e.target.files[0]; if (!x) return;
+  if (!/^image\/(jpeg|png|webp)$/.test(x.type) || x.size > 5 * 1024 * 1024) { e.target.value = ''; return toast('Logo harus JPG/PNG/WEBP, maks 5 MB', true); }
+  logoFile = x; logoRemoved = false; $('#sLogo').src = URL.createObjectURL(x); $('#sLogo').classList.remove('hidden');
+};
+$('#sRm').onclick = () => { logoRemoved = true; logoFile = null; $('#sLogo').classList.add('hidden'); $('#sRm').classList.add('hidden'); };
+$('#sSave').onclick = async () => {
+  const wa = $('#sWa').value.replace(/\D/g, '').replace(/^0/, '62');
+  if (!/^62\d{8,13}$/.test(wa)) return toast('Nomor WhatsApp tidak valid (contoh 62812xxxxxxx)', true);
+  $('#sSave').disabled = true;
+  try {
+    let logo_url = logoRemoved ? '' : (S.logo_url || '');
+    if (logoFile) logo_url = (await post({ action: 'uploadImage', image: await toBase64(logoFile, 600), mime: 'image/jpeg', filename: 'logo.jpg' })).url;
+    const vals = { business_name: $('#sName').value.trim() || 'Nael Food', address: $('#sAddr').value.trim(), admin_wa: wa, footer_note: $('#sFoot').value.trim(), logo_url };
+    for (const [key, value] of Object.entries(vals)) await post({ action: 'saveSetting', key, value });
+    Object.assign(S, vals); logoFile = null; logoRemoved = false; fillSettings(); toast('Pengaturan cetak disimpan'); schedule();
+  } catch (x) { toast(x.message, true); } finally { $('#sSave').disabled = false; }
+};
+
+/* ---------- Init ---------- */
+try {
+  $('#st').innerHTML = [['active', 'Semua (tanpa Dibatalkan)'], ['', 'Semua termasuk Dibatalkan'], ...STATUS.map(s => [s, s])].map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+  $('#paper').value = prefs.paper;
+  const pre = JSON.parse(sessionStorage.getItem('nael_print') || 'null'); sessionStorage.removeItem('nael_print');   // kiriman dari halaman Order
+  if (pre) { prefs.mode = pre.mode || prefs.mode; pre.ids.forEach(id => { sel.add(id); pinned.add(id); }); $('#st').value = ''; }
+  const [{ orders: o, items }, settings] = await Promise.all([loadData(), get('settings')]);
+  orders = o.reverse(); S = settings;
+  items.forEach(i => (byOrder[i.order_id] ||= []).push(i));
+  drawTabs(); fillSettings(); refresh();
+} catch (e) { toast(e.message, true); }
+</script></body></html>
